@@ -8,7 +8,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/ARD/Scenes/GameRoot.unity
     guid: d35c356562ccffd4b88e504644c4d6d2
-  - enabled: 1
+  - enabled: 0
     path: Assets/ARD/Scenes/Game.unity
     guid: 99c9720ab356a0642a771bea13969a05
   m_configObjects:

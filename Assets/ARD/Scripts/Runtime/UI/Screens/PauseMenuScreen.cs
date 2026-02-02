@@ -17,9 +17,9 @@ public sealed class PauseMenuScreen : MonoBehaviour
 
         if (nm.LocalClient != null && nm.LocalClient.PlayerObject != null)
         {
-            var relay = nm.LocalClient.PlayerObject.GetComponent<PlayerInputRelay>();
-            if (relay != null)
-                relay.SetPaused(false);
+            var input = nm.LocalClient.PlayerObject.GetComponent <PlayerInputController>();
+            if (input != null)
+                input.SetPaused(false);
         }
     }
 
