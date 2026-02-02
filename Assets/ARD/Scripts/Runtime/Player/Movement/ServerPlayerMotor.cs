@@ -1,12 +1,13 @@
 using Unity.Netcode;
 using UnityEngine;
 
-
 /// <summary>
 /// Server-authoritative CharacterController movement.
 /// Receives input snapshots from owning client via PlayerInputRelay.
 /// Uses absolute aim yaw/pitch for authoritative movement + weapon raycasts.
-/// Replicates body yaw to non-owners and sends reconciliation to owner.
+/// Replicates body yaw to everyone and rotates ViewModelRoot to face aim direction.
+/// 
+/// UPDATED: Rotates ViewModelRoot (character model) instead of yawPivot (camera).
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
 public sealed class ServerPlayerMotor : NetworkBehaviour
@@ -14,16 +15,16 @@ public sealed class ServerPlayerMotor : NetworkBehaviour
     [Header("Movement Settings")]
     [SerializeField] private MovementSettings movementSettings;
 
-    // This is the transform that represents the player's view (for yaw rotation).
-    [SerializeField] private Transform viewTransform;
-
     [Header("Aim Clamp (Server)")]
     [SerializeField] private float pitchMin = -80f;
     [SerializeField] private float pitchMax = 80f;
 
-    [Header("Presentation")]
-    [Tooltip("Yaw pivot used for non-owners to see body rotation (owner drives locally).")]
-    [SerializeField] private Transform yawPivot;
+    [Header("Character Model")]
+    [Tooltip("The character's visual model root (e.g., ViewModelRoot) - rotates to face aim direction")]
+    [SerializeField] private Transform viewModelRoot;
+
+    [Tooltip("How fast the model rotates (degrees/sec). 0 = instant snap.")]
+    [SerializeField] private float modelRotationSpeed = 720f;
 
     private CharacterController _cc;
 
@@ -43,11 +44,19 @@ public sealed class ServerPlayerMotor : NetworkBehaviour
     private Vector3 _horizVel;
     private float _verticalVel;
 
-    // Replicate body yaw to everyone (for non-owner presentation)
+    // Replicate body yaw to everyone (for non-owner character model rotation)
     private readonly NetworkVariable<float> _netBodyYaw = new(
         0f,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server);
+
+    // Public properties for animation system
+    public bool IsCrouching => _crouch;
+    public bool IsSprinting => _sprint;
+    public bool IsJumping => _verticalVel > 1f;
+    public Vector2 MoveInput => _move;
+    public float HorizontalSpeed => _horizVel.magnitude;
+    public float AimYawDegrees => _aimYaw; // Added for CharacterModelRotation
 
     public override void OnNetworkSpawn()
     {
@@ -55,7 +64,8 @@ public sealed class ServerPlayerMotor : NetworkBehaviour
 
         if (IsServer)
         {
-            float initialYaw = yawPivot != null ? yawPivot.eulerAngles.y : transform.eulerAngles.y;
+            // Initialize aim yaw from ViewModelRoot or root transform
+            float initialYaw = viewModelRoot != null ? viewModelRoot.eulerAngles.y : transform.eulerAngles.y;
             _aimYaw = initialYaw;
             _netBodyYaw.Value = initialYaw;
         }
@@ -80,6 +90,7 @@ public sealed class ServerPlayerMotor : NetworkBehaviour
         _fire = snapshot.Fire;
         _crouch = snapshot.Crouch;
 
+        // Update networked body yaw for remote players
         _netBodyYaw.Value = _aimYaw;
     }
 
@@ -92,13 +103,6 @@ public sealed class ServerPlayerMotor : NetworkBehaviour
         float dt = Time.deltaTime;
 
         Simulate(dt);
-
-        // Update view transform rotation
-        if (viewTransform != null)
-        {
-            // Apply absolute aim rotation
-            viewTransform.rotation = Quaternion.Euler(_aimPitch, _aimYaw, 0f);
-        }
 
         // Server-authoritative firing
         if (_fire && TryGetComponent(out ServerWeapon weapon))
@@ -151,12 +155,45 @@ public sealed class ServerPlayerMotor : NetworkBehaviour
 
     private void LateUpdate()
     {
-        // Non-owner presentation: apply replicated yaw so other clients see body turning.
-        if (!IsClient) return;
-        if (IsOwner) return;
+        // Rotate ViewModelRoot (character model) to face aim direction
+        if (viewModelRoot == null) return;
 
-        if (yawPivot != null)
-            yawPivot.rotation = Quaternion.Euler(0f, _netBodyYaw.Value, 0f);
+        float targetYaw;
+
+        // Owner: Use local aim yaw (updated this frame, no network lag)
+        if (IsOwner && IsClient)
+        {
+            // Get yaw from camera controller
+            var cameraController = GetComponent<PlayerCameraController>();
+            targetYaw = cameraController != null ? cameraController.YawDegrees : _aimYaw;
+        }
+        // Remote players: Use networked yaw
+        else if (!IsOwner && IsClient)
+        {
+            targetYaw = _netBodyYaw.Value;
+        }
+        // Server-only (no client): Use server's aim yaw
+        else
+        {
+            targetYaw = _aimYaw;
+        }
+
+        // Create target rotation (only Y axis)
+        Quaternion targetRotation = Quaternion.Euler(0f, targetYaw, 0f);
+
+        // Apply rotation (smooth or instant)
+        if (modelRotationSpeed > 0f)
+        {
+            viewModelRoot.rotation = Quaternion.RotateTowards(
+                viewModelRoot.rotation,
+                targetRotation,
+                modelRotationSpeed * Time.deltaTime
+            );
+        }
+        else
+        {
+            viewModelRoot.rotation = targetRotation;
+        }
     }
 
     [Rpc(SendTo.Owner)]

@@ -12,8 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ff32996adab9022478a2dd756e5782ec, type: 3}
   m_Name: Movement Settings
   m_EditorClassIdentifier: Assembly-CSharp::MovementSettings
-  walkSpeed: 4
+  walkSpeed: 3
   sprintSpeed: 6
+  crouchSpeed: 2.5
   groundAccel: 55
   groundDecel: 75
   airAccel: 18
