@@ -80,6 +80,13 @@ public sealed class PlayerInputController : NetworkBehaviour
 
         // Setup input
         _controls = new PlayerControls();
+
+        if (_controls == null)
+        {
+            Debug.LogError("[PlayerInput] Failed to create PlayerControls!");
+            return;
+        }
+
         _controls.Gameplay.Enable();
         _controls.UI.Enable();
         _controls.UI.Pause.performed += OnPausePressed;
@@ -117,7 +124,10 @@ public sealed class PlayerInputController : NetworkBehaviour
     private void Update()
     {
         if (!IsOwner) return;
-        if (_controls == null) return;
+        if (_controls == null)
+        {
+            return;
+        }
 
         // Skip input if paused
         if (_ui != null && _ui.IsPaused)
@@ -172,9 +182,20 @@ public sealed class PlayerInputController : NetworkBehaviour
     {
         if (!IsServer) return;
 
+        // FIX: Get the motor reference if we don't have it yet
+        // This happens on the server's copy of the client's player object
+        if (_serverMotor == null)
+            _serverMotor = GetComponent<PlayerMotorServer>();
+
         // Apply to server motor
         if (_serverMotor != null)
+        {
             _serverMotor.SetInput(snapshot);
+        }
+        else
+        {
+            Debug.LogError("[PlayerInput] ServerMotor component is missing from player prefab!");
+        }
     }
 
     // ============================================================

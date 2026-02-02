@@ -1827,7 +1827,7 @@ GameObject:
   - component: {fileID: 1915961442168038127}
   - component: {fileID: 4255244879902670141}
   - component: {fileID: 7402053301401527392}
-  - component: {fileID: 5802086402848728559}
+  - component: {fileID: 2259679316839149149}
   - component: {fileID: 5115460262606714580}
   - component: {fileID: 255942125900029708}
   - component: {fileID: 5045420039274489275}
@@ -1911,14 +1911,14 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
---- !u!114 &5802086402848728559
+--- !u!114 &2259679316839149149
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4897235591714832697}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e96cb6065543e43c4a752faaa1468eb1, type: 3}
   m_Name: 
@@ -1926,7 +1926,7 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   NetworkTransformExpanded: 0
   AutoOwnerAuthorityTickOffset: 1
-  PositionInterpolationType: 2
+  PositionInterpolationType: 0
   RotationInterpolationType: 0
   ScaleInterpolationType: 0
   PositionLerpSmoothing: 1
@@ -1941,9 +1941,9 @@ MonoBehaviour:
   SyncPositionX: 1
   SyncPositionY: 1
   SyncPositionZ: 1
-  SyncRotAngleX: 0
-  SyncRotAngleY: 0
-  SyncRotAngleZ: 0
+  SyncRotAngleX: 1
+  SyncRotAngleY: 1
+  SyncRotAngleZ: 1
   SyncScaleX: 0
   SyncScaleY: 0
   SyncScaleZ: 0
@@ -1956,7 +1956,7 @@ MonoBehaviour:
   InLocalSpace: 0
   SwitchTransformSpaceWhenParented: 0
   Interpolate: 1
-  SlerpPosition: 1
+  SlerpPosition: 0
 --- !u!114 &5115460262606714580
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1987,6 +1987,8 @@ MonoBehaviour:
   pitchMin: -80
   pitchMax: 80
   reconcileInterval: 2
+  speedEpsilon: 0.01
+  inputEpsilon: 0.01
 --- !u!114 &5045420039274489275
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2003,6 +2005,8 @@ MonoBehaviour:
   settings: {fileID: 11400000, guid: b8059801ed932e144aa9fb946c1f080f, type: 2}
   snapThreshold: 0.5
   correctionSpeed: 15
+  speedEpsilon: 0.01
+  inputEpsilon: 0.01
 --- !u!114 &1333812164617553727
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2058,9 +2062,9 @@ MonoBehaviour:
   isJumpingParam: IsJumping
   isCrouchingParam: IsCrouching
   isSprintingParam: IsSprinting
-  walkSpeedMultiplier: 1
-  sprintSpeedMultiplier: 1.5
-  crouchSpeedMultiplier: 0.6
+  walkSpeedReference: 4.5
+  sprintSpeedReference: 6
+  crouchSpeedReference: 2.5
   speedSmoothTime: 0.1
   inputDampTime: 0.1
   bodyRotationSpeed: 720
@@ -2097,6 +2101,7 @@ MonoBehaviour:
   leftHandRotationOffset: {x: 0, y: 0, z: 0}
   positionSmoothTime: 0.1
   rotationSmoothSpeed: 10
+  showDebugGizmos: 0
 --- !u!114 &5965212118249693458
 MonoBehaviour:
   m_ObjectHideFlags: 0

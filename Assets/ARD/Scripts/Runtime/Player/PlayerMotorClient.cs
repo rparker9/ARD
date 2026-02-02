@@ -20,6 +20,13 @@ public sealed class PlayerMotorClient : NetworkBehaviour
     [Tooltip("Smooth out small errors at this rate (units/sec)")]
     [SerializeField] private float correctionSpeed = 15f;
 
+    [Header("Thresholds")]
+    [Tooltip("Speed below this is snapped to zero (must match server)")]
+    [SerializeField] private float speedEpsilon = 0.01f;
+
+    [Tooltip("Input magnitude below this is snapped to zero (must match server)")]
+    [SerializeField] private float inputEpsilon = 0.01f;
+
     private CharacterController _cc;
     private PlayerState _state;
 
@@ -67,6 +74,11 @@ public sealed class PlayerMotorClient : NetworkBehaviour
     public void SetLocalInput(Vector2 move, float aimYaw, bool jump, bool sprint, bool crouch)
     {
         _moveInput = Vector2.ClampMagnitude(move, 1f);
+
+        // THRESHOLD CHECK: Snap tiny input to zero (must match server)
+        if (_moveInput.sqrMagnitude < inputEpsilon * inputEpsilon)
+            _moveInput = Vector2.zero;
+
         _aimYaw = aimYaw;
         _jump = jump;
         _sprint = sprint;
@@ -119,6 +131,11 @@ public sealed class PlayerMotorClient : NetworkBehaviour
             _horizVel,
             hasInput ? desiredVel : Vector3.zero,
             maxDelta);
+
+        // THRESHOLD CHECK: Snap tiny velocity to zero (must match server)
+        float horizSpeed = _horizVel.magnitude;
+        if (horizSpeed < speedEpsilon)
+            _horizVel = Vector3.zero;
 
         // Vertical physics (must match server exactly)
         if (grounded)

@@ -5,10 +5,6 @@ using UnityEngine;
 /// CLIENT-ONLY (Non-Owner): Drives animator based on PlayerState.
 /// This component only runs for REMOTE players (what others see).
 /// Owner uses separate FPS arm rig.
-/// 
-/// IMPORTANT: This version properly handles blend tree parameters.
-/// - MoveSpeed: Magnitude of movement (0-1 for walk, 1-1.5 for sprint, etc.)
-/// - MoveX/MoveY: Direction of movement relative to body (-1 to 1)
 /// </summary>
 [RequireComponent(typeof(PlayerState))]
 public sealed class PlayerAnimationClient : NetworkBehaviour
@@ -28,9 +24,9 @@ public sealed class PlayerAnimationClient : NetworkBehaviour
 
     [Header("Animation Speed Mapping")]
     [Tooltip("How to map actual speed to animation speed")]
-    [SerializeField] private float walkSpeedReference = 4.5f; // Should match MovementSettings
-    [SerializeField] private float sprintSpeedReference = 6.0f; // Should match MovementSettings
-    [SerializeField] private float crouchSpeedReference = 2.5f; // Should match MovementSettings
+    [SerializeField] private float walkSpeedReference = 4.5f;
+    [SerializeField] private float sprintSpeedReference = 6.0f;
+    [SerializeField] private float crouchSpeedReference = 2.5f;
 
     [Header("Smoothing")]
     [Tooltip("Smooth speed changes (0 = instant)")]
@@ -45,9 +41,6 @@ public sealed class PlayerAnimationClient : NetworkBehaviour
     [Header("Visibility")]
     [Tooltip("Renderers to hide for owner (FPS view)")]
     [SerializeField] private Renderer[] characterRenderers;
-
-    [Header("Debug")]
-    [SerializeField] private bool showDebugInfo = false;
 
     private Animator _animator;
     private PlayerState _state;
@@ -65,6 +58,10 @@ public sealed class PlayerAnimationClient : NetworkBehaviour
     private float _currentSpeed;
     private float _speedVelocity;
 
+    // Target inputs
+    private Vector2 _targetMoveInput;
+    private const float AnimatorFloatEpsilon = 0.001f;
+
     // ============================================================
     // LIFECYCLE
     // ============================================================
@@ -73,6 +70,17 @@ public sealed class PlayerAnimationClient : NetworkBehaviour
     {
         _animator = GetComponentInChildren<Animator>();
         _state = GetComponent<PlayerState>();
+
+        // Verify animator found
+        if (_animator == null)
+        {
+            Debug.LogError($"[PlayerAnimationClient] Animator not found on {gameObject.name}! Make sure Animator component is on a child GameObject.");
+        }
+        else
+        {
+            // Verify parameters exist
+            VerifyAnimatorParameters();
+        }
 
         // Cache parameter hashes
         _moveSpeedHash = Animator.StringToHash(moveSpeedParam);
@@ -84,6 +92,39 @@ public sealed class PlayerAnimationClient : NetworkBehaviour
         _isSprintingHash = Animator.StringToHash(isSprintingParam);
     }
 
+    private void VerifyAnimatorParameters()
+    {
+        if (_animator == null) return;
+
+        bool hasSpeed = HasParameter(moveSpeedParam);
+        bool hasMoveX = HasParameter(moveXParam);
+        bool hasMoveY = HasParameter(moveYParam);
+        bool hasGrounded = HasParameter(isGroundedParam);
+        bool hasJumping = HasParameter(isJumpingParam);
+        bool hasCrouching = HasParameter(isCrouchingParam);
+        bool hasSprinting = HasParameter(isSprintingParam);
+
+        if (!hasSpeed) Debug.LogError($"[PlayerAnimationClient] Animator missing parameter: {moveSpeedParam}");
+        if (!hasMoveX) Debug.LogError($"[PlayerAnimationClient] Animator missing parameter: {moveXParam}");
+        if (!hasMoveY) Debug.LogError($"[PlayerAnimationClient] Animator missing parameter: {moveYParam}");
+        if (!hasGrounded) Debug.LogWarning($"[PlayerAnimationClient] Animator missing parameter: {isGroundedParam}");
+        if (!hasJumping) Debug.LogWarning($"[PlayerAnimationClient] Animator missing parameter: {isJumpingParam}");
+        if (!hasCrouching) Debug.LogWarning($"[PlayerAnimationClient] Animator missing parameter: {isCrouchingParam}");
+        if (!hasSprinting) Debug.LogWarning($"[PlayerAnimationClient] Animator missing parameter: {isSprintingParam}");
+    }
+
+    private bool HasParameter(string paramName)
+    {
+        if (_animator == null) return false;
+
+        foreach (var param in _animator.parameters)
+        {
+            if (param.name == paramName)
+                return true;
+        }
+        return false;
+    }
+
     public override void OnNetworkSpawn()
     {
         // Owner: hide character model (using FPS arms instead)
@@ -91,6 +132,7 @@ public sealed class PlayerAnimationClient : NetworkBehaviour
         {
             SetRenderersVisible(false);
             enabled = false;
+
             return;
         }
 
@@ -127,27 +169,12 @@ public sealed class PlayerAnimationClient : NetworkBehaviour
     {
         if (_animator == null) return;
 
-        // Convert input to body-relative direction
-        // The input is already in the correct space from the server
-        Vector2 bodyRelativeInput = CalculateBodyRelativeInput(curr);
-
-        if (showDebugInfo)
-        {
-            Debug.Log($"[AnimClient] Input: {curr} → BodyRelative: {bodyRelativeInput}");
-        }
-
-        // Use dampening for smooth transitions
-        _animator.SetFloat(_moveXHash, bodyRelativeInput.x, inputDampTime, Time.deltaTime);
-        _animator.SetFloat(_moveYHash, bodyRelativeInput.y, inputDampTime, Time.deltaTime);
+        _targetMoveInput = curr;
     }
 
     private void OnSpeedChanged(float prev, float curr)
     {
-        // Speed smoothing handled in LateUpdate
-        if (showDebugInfo)
-        {
-            Debug.Log($"[AnimClient] Speed changed: {prev} → {curr}");
-        }
+
     }
 
     private void OnGroundedChanged(bool prev, bool curr)
@@ -182,11 +209,41 @@ public sealed class PlayerAnimationClient : NetworkBehaviour
     {
         if (IsOwner) return;
 
+        UpdateMoveInput();
+
         // Smooth speed for blend tree
         UpdateSpeed();
 
         // Rotate character model to match body rotation
         UpdateBodyRotation();
+    }
+
+    private void UpdateMoveInput()
+    {
+        if (_animator == null) return;
+
+        Vector2 v = _targetMoveInput;
+
+        // Snap tiny drift
+        if (Mathf.Abs(v.x) < AnimatorFloatEpsilon) v.x = 0f;
+        if (Mathf.Abs(v.y) < AnimatorFloatEpsilon) v.y = 0f;
+
+        // Direction-only for 2D Freeform Directional
+        if (v.sqrMagnitude > AnimatorFloatEpsilon * AnimatorFloatEpsilon)
+            v = v.normalized;
+        else
+            v = Vector2.zero;
+
+        if (inputDampTime > 0f)
+        {
+            _animator.SetFloat(_moveXHash, v.x, inputDampTime, Time.deltaTime);
+            _animator.SetFloat(_moveYHash, v.y, inputDampTime, Time.deltaTime);
+        }
+        else
+        {
+            _animator.SetFloat(_moveXHash, v.x);
+            _animator.SetFloat(_moveYHash, v.y);
+        }
     }
 
     private void UpdateSpeed()
@@ -196,24 +253,9 @@ public sealed class PlayerAnimationClient : NetworkBehaviour
         // Get actual speed from state
         float actualSpeed = _state.Speed.Value;
 
-        // Normalize speed based on movement mode
-        float normalizedSpeed = 0f;
-
-        if (_state.IsCrouching.Value)
-        {
-            // Crouch: 0-1 range
-            normalizedSpeed = actualSpeed / crouchSpeedReference;
-        }
-        else if (_state.IsSprinting.Value)
-        {
-            // Sprint: 1-1.5+ range (or whatever your blend tree uses)
-            normalizedSpeed = actualSpeed / walkSpeedReference; // Normalize to walk speed
-        }
-        else
-        {
-            // Walk: 0-1 range
-            normalizedSpeed = actualSpeed / walkSpeedReference;
-        }
+        // Simple normalized speed (you can adjust this based on your blend tree)
+        // For most blend trees: 0 = idle, 1 = walk, >1 = run
+        float normalizedSpeed = actualSpeed / walkSpeedReference;
 
         // Clamp to reasonable range
         normalizedSpeed = Mathf.Clamp(normalizedSpeed, 0f, 2f);
@@ -232,17 +274,22 @@ public sealed class PlayerAnimationClient : NetworkBehaviour
             _currentSpeed = normalizedSpeed;
         }
 
-        _animator.SetFloat(_moveSpeedHash, _currentSpeed);
-
-        if (showDebugInfo)
+        // IMPORTANT: snap tiny values to 0 so blend trees truly idle.
+        if (Mathf.Abs(_currentSpeed) < AnimatorFloatEpsilon)
         {
-            Debug.Log($"[AnimClient] ActualSpeed: {actualSpeed:F2}, Normalized: {normalizedSpeed:F2}, Current: {_currentSpeed:F2}");
+            _currentSpeed = 0f;
+            _speedVelocity = 0f; // prevent tiny residual velocity from reintroducing drift
         }
+
+        _animator.SetFloat(_moveSpeedHash, _currentSpeed);
     }
 
     private void UpdateBodyRotation()
     {
-        if (characterModelRoot == null) return;
+        if (characterModelRoot == null)
+        {
+            return;
+        }
 
         Quaternion targetRotation = _state.BodyRotation.Value;
 
@@ -259,39 +306,35 @@ public sealed class PlayerAnimationClient : NetworkBehaviour
         }
     }
 
-    /// <summary>
-    /// Convert world-space input to body-relative input for animations.
-    /// The server sends input in aim-space (where forward is aim direction).
-    /// We need to convert it to body-space for the animator.
-    /// </summary>
-    private Vector2 CalculateBodyRelativeInput(Vector2 worldInput)
-    {
-        // The input from server is already in aim-space
-        // Since body rotation matches aim yaw, input is already correct
-        return worldInput;
-    }
-
     private void UpdateAllParameters()
     {
         if (_animator == null) return;
 
-        // Update directional input
         Vector2 moveInput = _state.MoveInput.Value;
-        Vector2 bodyRelativeInput = CalculateBodyRelativeInput(moveInput);
+        _targetMoveInput = moveInput;
 
-        _animator.SetFloat(_moveXHash, bodyRelativeInput.x, inputDampTime, Time.deltaTime);
-        _animator.SetFloat(_moveYHash, bodyRelativeInput.y, inputDampTime, Time.deltaTime);
+        if (Mathf.Abs(moveInput.x) < AnimatorFloatEpsilon) moveInput.x = 0f;
+        if (Mathf.Abs(moveInput.y) < AnimatorFloatEpsilon) moveInput.y = 0f;
 
-        // Update bool states
-        _animator.SetBool(_isGroundedHash, _state.IsGrounded.Value);
-        _animator.SetBool(_isJumpingHash, _state.IsJumping.Value);
-        _animator.SetBool(_isCrouchingHash, _state.IsCrouching.Value);
-        _animator.SetBool(_isSprintingHash, _state.IsSprinting.Value);
+        if (moveInput.sqrMagnitude > AnimatorFloatEpsilon * AnimatorFloatEpsilon)
+            moveInput = moveInput.normalized;
+        else
+            moveInput = Vector2.zero;
 
-        // Initialize speed
+        _animator.SetFloat(_moveXHash, moveInput.x);
+        _animator.SetFloat(_moveYHash, moveInput.y);
+
+        // Initialize speed (instant, no smoothing)
         float actualSpeed = _state.Speed.Value;
         float normalizedSpeed = actualSpeed / walkSpeedReference;
+        normalizedSpeed = Mathf.Clamp(normalizedSpeed, 0f, 2f);
+
         _currentSpeed = normalizedSpeed;
+        _speedVelocity = 0f;
+
+        if (Mathf.Abs(_currentSpeed) < AnimatorFloatEpsilon)
+            _currentSpeed = 0f;
+
         _animator.SetFloat(_moveSpeedHash, _currentSpeed);
 
         // Initialize body rotation
@@ -320,28 +363,17 @@ public sealed class PlayerAnimationClient : NetworkBehaviour
     }
 
     // ============================================================
-    // DEBUG
+    // HELPER METHODS
     // ============================================================
-
-    private void OnGUI()
+    private static Vector2 SquareNormalizeForAnim(Vector2 v, float epsilon)
     {
-        if (!showDebugInfo || IsOwner) return;
+        float ax = Mathf.Abs(v.x);
+        float ay = Mathf.Abs(v.y);
+        float m = Mathf.Max(ax, ay);
 
-        GUILayout.BeginArea(new Rect(10, 200, 300, 200));
-        GUILayout.Label($"=== Animation Debug ===");
-        GUILayout.Label($"Speed: {_state.Speed.Value:F2} → {_currentSpeed:F2}");
-        GUILayout.Label($"MoveInput: {_state.MoveInput.Value}");
-        GUILayout.Label($"Grounded: {_state.IsGrounded.Value}");
-        GUILayout.Label($"Sprinting: {_state.IsSprinting.Value}");
-        GUILayout.Label($"Crouching: {_state.IsCrouching.Value}");
+        if (m < epsilon)
+            return Vector2.zero;
 
-        if (_animator != null)
-        {
-            GUILayout.Label($"--- Animator Params ---");
-            GUILayout.Label($"MoveSpeed: {_animator.GetFloat(_moveSpeedHash):F2}");
-            GUILayout.Label($"MoveX: {_animator.GetFloat(_moveXHash):F2}");
-            GUILayout.Label($"MoveY: {_animator.GetFloat(_moveYHash):F2}");
-        }
-        GUILayout.EndArea();
+        return v / m; // diagonals (0.707, 0.707) become (1, 1)
     }
 }

@@ -94,8 +94,6 @@ public sealed class NetSession : MonoBehaviour
 
         res.Position = pos;
         res.Rotation = rot;
-
-        Debug.Log($"ApprovalCheck spawn='{playerSpawn.name}' finalPos={pos} finalRotEuler={rot.eulerAngles}");
     }
 
     private void OnClientConnected(ulong clientId)
@@ -166,8 +164,6 @@ public sealed class NetSession : MonoBehaviour
 
         if (cc != null)
             cc.enabled = ccWasEnabled;
-
-        Debug.Log($"ForcePlayerSpawn client={clientId} pos={pos} rotEuler={rot.eulerAngles}");
     }
 
     private void OnClientDisconnected(ulong clientId)

@@ -21,6 +21,13 @@ public sealed class PlayerMotorServer : NetworkBehaviour
     [Tooltip("Send corrections to owner every N frames (0 = every frame)")]
     [SerializeField] private int reconcileInterval = 2;
 
+    [Header("Thresholds")]
+    [Tooltip("Speed below this is snapped to zero")]
+    [SerializeField] private float speedEpsilon = 0.01f;
+
+    [Tooltip("Input magnitude below this is snapped to zero")]
+    [SerializeField] private float inputEpsilon = 0.01f;
+
     private CharacterController _cc;
     private PlayerState _state;
 
@@ -108,6 +115,11 @@ public sealed class PlayerMotorServer : NetworkBehaviour
 
         // Calculate desired velocity in world space
         Vector2 moveInput = Vector2.ClampMagnitude(_input.Move, 1f);
+
+        // THRESHOLD CHECK: Snap tiny input to zero
+        if (moveInput.sqrMagnitude < inputEpsilon * inputEpsilon)
+            moveInput = Vector2.zero;
+
         Quaternion yawRot = Quaternion.Euler(0f, aimYaw, 0f);
         Vector3 desiredVel = yawRot * new Vector3(moveInput.x, 0f, moveInput.y) * targetSpeed;
 
@@ -125,6 +137,11 @@ public sealed class PlayerMotorServer : NetworkBehaviour
             _horizVel,
             hasInput ? desiredVel : Vector3.zero,
             maxDelta);
+
+        // THRESHOLD CHECK: Snap tiny velocity to zero
+        float horizSpeed = _horizVel.magnitude;
+        if (horizSpeed < speedEpsilon)
+            _horizVel = Vector3.zero;
 
         // Vertical physics
         if (grounded)
@@ -145,9 +162,23 @@ public sealed class PlayerMotorServer : NetworkBehaviour
 
     private void UpdateState()
     {
-        // Movement
-        _state.MoveInput.Value = _input.Move;
-        _state.Speed.Value = _horizVel.magnitude;
+        // Calculate clean speed value
+        float horizSpeed = _horizVel.magnitude;
+
+        // THRESHOLD CHECK: Snap tiny speed to zero
+        if (horizSpeed < speedEpsilon)
+            horizSpeed = 0f;
+
+        // Calculate clean input value
+        Vector2 cleanInput = _input.Move;
+
+        // THRESHOLD CHECK: Snap tiny input to zero
+        if (cleanInput.sqrMagnitude < inputEpsilon * inputEpsilon)
+            cleanInput = Vector2.zero;
+
+        // Movement - use cleaned values
+        _state.MoveInput.Value = cleanInput;
+        _state.Speed.Value = horizSpeed;
 
         // Physics
         _state.IsGrounded.Value = _cc.isGrounded;
