@@ -1,5 +1,9 @@
 using UnityEngine;
 
+/// <summary>
+/// The AppRoot is a singleton MonoBehaviour that persists across scene loads and serves as the root of the application.
+/// It's used to hold core components like AppFlow and UIRoot, ensuring they remain accessible throughout the app's lifecycle.
+/// </summary>
 public sealed class AppRoot : MonoBehaviour
 {
     public static AppRoot Instance { get; private set; }

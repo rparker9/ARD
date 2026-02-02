@@ -226,11 +226,11 @@ GameObject:
   - component: {fileID: 7665395892280649990}
   m_Layer: 5
   m_Name: ConnectingOverlay
-  m_TagString: HudCanvas
+  m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &3573487711890437200
 RectTransform:
   m_ObjectHideFlags: 0

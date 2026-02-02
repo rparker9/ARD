@@ -6,6 +6,7 @@ public sealed class MovementSettings : ScriptableObject
     [Header("Movement")]
     public float walkSpeed = 4.5f;
     public float sprintSpeed = 6.0f;
+    public float crouchSpeed = 2.5f;
 
     [Header("Acceleration (m/s^2)")]
     public float groundAccel = 55f;

@@ -14,6 +14,9 @@ public sealed class ServerPlayerMotor : NetworkBehaviour
     [Header("Movement Settings")]
     [SerializeField] private MovementSettings movementSettings;
 
+    // This is the transform that represents the player's view (for yaw rotation).
+    [SerializeField] private Transform viewTransform;
+
     [Header("Aim Clamp (Server)")]
     [SerializeField] private float pitchMin = -80f;
     [SerializeField] private float pitchMax = 80f;
@@ -30,6 +33,7 @@ public sealed class ServerPlayerMotor : NetworkBehaviour
     private bool _jump;
     private bool _sprint;
     private bool _fire;
+    private bool _crouch;
 
     // Absolute aim angles (degrees)
     private float _aimYaw;
@@ -63,17 +67,18 @@ public sealed class ServerPlayerMotor : NetworkBehaviour
     /// <summary>
     /// Server receives latest input snapshot from owner.
     /// </summary>
-    public void SetInput(int tick, Vector2 move, float aimYaw, float aimPitch, bool jump, bool sprint, bool fire)
+    public void SetInput(PlayerInputSnapshot snapshot)
     {
         if (!IsServer) return;
 
-        _tick = tick;
-        _move = Vector2.ClampMagnitude(move, 1f);
-        _aimYaw = aimYaw;
-        _aimPitch = Mathf.Clamp(aimPitch, pitchMin, pitchMax);
-        _jump = jump;
-        _sprint = sprint;
-        _fire = fire;
+        _tick = snapshot.Tick;
+        _move = Vector2.ClampMagnitude(snapshot.Move, 1f);
+        _aimYaw = snapshot.AimYaw;
+        _aimPitch = Mathf.Clamp(snapshot.AimPitch, pitchMin, pitchMax);
+        _jump = snapshot.Jump;
+        _sprint = snapshot.Sprint;
+        _fire = snapshot.Fire;
+        _crouch = snapshot.Crouch;
 
         _netBodyYaw.Value = _aimYaw;
     }
@@ -88,6 +93,13 @@ public sealed class ServerPlayerMotor : NetworkBehaviour
 
         Simulate(dt);
 
+        // Update view transform rotation
+        if (viewTransform != null)
+        {
+            // Apply absolute aim rotation
+            viewTransform.rotation = Quaternion.Euler(_aimPitch, _aimYaw, 0f);
+        }
+
         // Server-authoritative firing
         if (_fire && TryGetComponent(out ServerWeapon weapon))
             weapon.TryFireServer();
@@ -98,29 +110,41 @@ public sealed class ServerPlayerMotor : NetworkBehaviour
 
     private void Simulate(float dt)
     {
-        float speed = _sprint ? movementSettings.sprintSpeed : movementSettings.walkSpeed;
+        // Determine target speed based on crouch, sprint, or walk state
+        float speed = _crouch ? movementSettings.crouchSpeed : (_sprint ? movementSettings.sprintSpeed : movementSettings.walkSpeed);
 
-        Quaternion yawRot = Quaternion.Euler(0f, _aimYaw, 0f);
-        Vector3 desired = yawRot * new Vector3(_move.x, 0f, _move.y);
-        desired *= speed;
+        // Calculate desired horizontal velocity in world space based on input and aim yaw
+        Quaternion yawRot = Quaternion.Euler(0f, _aimYaw, 0f);          // Yaw only
+        Vector3 desired = yawRot * new Vector3(_move.x, 0f, _move.y);   // Local to world
+        desired *= speed;                                               // Scale by target speed
 
+        // Grounded check
         bool grounded = _cc.isGrounded;
 
+        // Horizontal velocity acceleration/deceleration
         float accel = grounded ? movementSettings.groundAccel : movementSettings.airAccel;
         float decel = grounded ? movementSettings.groundDecel : movementSettings.airDecel;
 
+        // Move horizontal velocity toward desired or zero based on input
         bool hasInput = _move.sqrMagnitude > 0.0001f;
         float maxDelta = (hasInput ? accel : decel) * dt;
         _horizVel = Vector3.MoveTowards(_horizVel, hasInput ? desired : Vector3.zero, maxDelta);
 
         if (grounded)
         {
-            if (_verticalVel < 0f) _verticalVel = -1f;
-            if (_jump) _verticalVel = movementSettings.jumpSpeed;
+            // Clamp small negative vertical velocity when grounded
+            if (_verticalVel < 0f)
+                _verticalVel = -1f;
+
+            // If jumping, set vertical velocity
+            if (_jump)
+                _verticalVel = movementSettings.jumpSpeed;
         }
 
+        // Apply gravity
         _verticalVel += movementSettings.gravity * dt;
 
+        // Move CharacterController using combined velocity (this also handles grounding)
         Vector3 vel = _horizVel + Vector3.up * _verticalVel;
         _cc.Move(vel * dt);
     }

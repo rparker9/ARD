@@ -5,10 +5,6 @@ TagManager:
   serializedVersion: 3
   tags:
   - FallbackCamera
-  - MainMenuCanvas
-  - ConnectingOverlay
-  - HudCanvas
-  - PauseCanvas
   layers:
   - Default
   - TransparentFX

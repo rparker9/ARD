@@ -213,6 +213,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 132ce94437b06d945996c06b97575688, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetSession
+  playerSpawn: {fileID: 0}
   listenAddress: 0.0.0.0
   port: 7777
   maxPlayers: 8
@@ -228,8 +229,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a7139f8717a75b448a0e6b9df095b0ff, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AppFlow
-  mainMenuScene: MainMenu
-  gameScene: Game
 --- !u!114 &5338148815162011087
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -242,6 +241,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 177e6e1ca27db1f4eafef9c8fb52b69c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UIRoot
+  _mainMenuCanvas: {fileID: 0}
+  _hudCanvas: {fileID: 0}
+  _pauseCanvas: {fileID: 0}
+  _connectingOverlay: {fileID: 0}
 --- !u!81 &989469838541799037
 AudioListener:
   m_ObjectHideFlags: 0

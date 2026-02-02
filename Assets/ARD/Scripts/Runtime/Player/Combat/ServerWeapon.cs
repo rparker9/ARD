@@ -39,6 +39,9 @@ public sealed class ServerWeapon : NetworkBehaviour
             var health = hit.collider.GetComponentInParent<NetworkHealth>();
             if (health != null)
                 health.ApplyDamage(10);
+
+            // Debug: Draw a line at the hit point with hit plane normal
+            Debug.DrawRay(hit.point, hit.normal, Color.red, 1f);
         }
 
         FireFxRpc(origin, dir);
@@ -48,5 +51,7 @@ public sealed class ServerWeapon : NetworkBehaviour
     private void FireFxRpc(Vector3 origin, Vector3 dir)
     {
         // Cosmetic only
+        if (!IsServer) return;
+        Debug.DrawRay(origin, dir * range, Color.green, 0.5f);
     }
 }

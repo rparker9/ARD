@@ -3,9 +3,9 @@ using UnityEngine;
 
 /// <summary>
 /// Owner-only presentation layer: camera enable + smooth local yaw/pitch.
-/// This does NOT decide gameplay outcomes (server does).
+/// Input is provided externally by PlayerInputRelay (single input owner).
 /// </summary>
-public sealed class PlayerViewController : NetworkBehaviour
+public sealed class PlayerCameraController : NetworkBehaviour
 {
     [SerializeField] private Camera playerCamera;
 
@@ -30,30 +30,18 @@ public sealed class PlayerViewController : NetworkBehaviour
 
     private const string FallbackCameraTag = "FallbackCamera";
 
-    private PlayerControls _controls;
-
     private float _yaw;
     private float _pitch;
-
     private Vector2 _smoothedLookDelta;
+
     private GameObject _fallbackCamera;
 
     public float PitchDegrees => _pitch;
     public float YawDegrees => _yaw;
 
-    private void OnDisable()
-    {
-        // If we get disabled unexpectedly (scene changes/editor stop), clean up input.
-        if (_controls != null)
-        {
-            _controls.Gameplay.Disable();
-            _controls.Dispose();
-            _controls = null;
-        }
-    }
-
     public override void OnNetworkSpawn()
     {
+        // Enable only for the owner.
         bool enable = IsOwner;
 
         // Enable/disable player camera
@@ -65,64 +53,47 @@ public sealed class PlayerViewController : NetworkBehaviour
         if (!enable)
             return;
 
-        // Disable fallback camera in the Game scene for local player
+        // Find fallback camera in scene
         if (_fallbackCamera == null)
             _fallbackCamera = GameObject.FindGameObjectWithTag(FallbackCameraTag);
 
+        // Disable fallback camera
         if (_fallbackCamera != null)
             _fallbackCamera.SetActive(false);
 
-        // Initialize yaw from current pivot so we don't snap.
+        // Initialize yaw/pitch from current transforms
         if (yawPivot != null)
             _yaw = yawPivot.eulerAngles.y;
 
-        // Lock cursor for FPS
+        // Default to locked cursor for FPS; pause system will unlock when paused.
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-
-        // Setup input
-        _controls = new PlayerControls();
-        _controls.Gameplay.Enable();
     }
 
     public override void OnNetworkDespawn()
     {
         if (IsOwner)
         {
-            // Restore fallback camera (if we're staying in this scene)
             if (_fallbackCamera == null)
                 _fallbackCamera = GameObject.FindGameObjectWithTag(FallbackCameraTag);
 
             if (_fallbackCamera != null)
                 _fallbackCamera.SetActive(true);
 
-            // Unlock cursor
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
-
-        // Clean up input
-        if (_controls != null)
-        {
-            _controls.Gameplay.Disable();
-            _controls.Dispose();
-            _controls = null;
-        }
     }
 
-    private void Update()
+    /// <summary>
+    /// Called by PlayerInputRelay (single input owner). Supply raw look delta from Input System.
+    /// </summary>
+    public void ApplyLook(Vector2 lookDelta, float dt)
     {
-        if (_controls == null) return;
-
-        // Mouse delta this frame (Input System "Delta" binding)
-        Vector2 lookDelta = _controls.Gameplay.Look.ReadValue<Vector2>();
-
-        // Sensitivity (applied consistently to both axes)
+        // Sensitivity
         lookDelta = new Vector2(
             lookDelta.x * lookSensitivityX,
             lookDelta.y * lookSensitivityY);
-
-        float dt = Time.deltaTime;
 
         // Smooth delta (exponential smoothing)
         float t = 1f - Mathf.Exp(-lookSmoothing * dt);
@@ -131,7 +102,6 @@ public sealed class PlayerViewController : NetworkBehaviour
         // Integrate yaw/pitch
         _yaw += _smoothedLookDelta.x;
 
-        // Keep yaw bounded (avoids float drift over long sessions)
         if (_yaw > 360f || _yaw < -360f)
             _yaw = Mathf.Repeat(_yaw, 360f);
 
@@ -144,3 +114,4 @@ public sealed class PlayerViewController : NetworkBehaviour
             pitchPivot.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
     }
 }
+
