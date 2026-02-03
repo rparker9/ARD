@@ -82,15 +82,31 @@ public sealed class PlayerState : NetworkBehaviour
     // EQUIPMENT STATE
     // ============================================================
 
-    /// <summary>Currently held object (for IK targeting)</summary>
-    public readonly NetworkVariable<NetworkObjectReference> HeldObject = new(
+    /// <summary>Currently grabbed object (for IK targeting)</summary>
+    public readonly NetworkVariable<NetworkObjectReference> GrabbedObject = new(
         default,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server);
 
     // ============================================================
-    // COMPUTED PROPERTIES (READ-ONLY)
+    // COMPUTED PROPERTIES
     // ============================================================
+
+    /// <summary>Currently grabbed object's HandGripPoints (resolved from GrabbedObject)</summary>
+    private HandGripPoints _cachedGripPoints;
+    public HandGripPoints GrabbedGripPoints
+    {
+        get
+        {
+            if (_cachedGripPoints == null && GrabbedObject.Value.TryGet(out NetworkObject netObj))
+                _cachedGripPoints = netObj != null ? netObj.GetComponent<HandGripPoints>() : null;
+            return _cachedGripPoints;
+        }
+    }
+
+    /// ============================================================
+    /// GETTERS
+    /// ===========================================================
 
     /// <summary>World-space aim direction vector</summary>
     public Vector3 AimDirection =>
@@ -99,28 +115,14 @@ public sealed class PlayerState : NetworkBehaviour
     /// <summary>Is player moving? (based on input, not velocity)</summary>
     public bool IsMoving => MoveInput.Value.sqrMagnitude > 0.01f;
 
-    /// <summary>Currently held GrippableObject (resolved from HeldObject)</summary>
-    private GrippableObject _cachedGrippable;
-    public GrippableObject HeldGrippable
-    {
-        get
-        {
-            if (_cachedGrippable == null && HeldObject.Value.TryGet(out NetworkObject netObj))
-                _cachedGrippable = netObj != null ? netObj.GetComponent<GrippableObject>() : null;
-            return _cachedGrippable;
-        }
-    }
-
     // ============================================================
     // LIFECYCLE
     // ============================================================
 
     public override void OnNetworkSpawn()
     {
-        // Subscribe to HeldObject changes to clear cache
-        HeldObject.OnValueChanged += OnHeldObjectChanged;
+        GrabbedObject.OnValueChanged += OnGrabbedObjectChanged;
 
-        // Initialize body rotation if server
         if (IsServer)
         {
             BodyRotation.Value = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
@@ -129,45 +131,41 @@ public sealed class PlayerState : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
-        HeldObject.OnValueChanged -= OnHeldObjectChanged;
+        GrabbedObject.OnValueChanged -= OnGrabbedObjectChanged;
     }
 
-    private void OnHeldObjectChanged(NetworkObjectReference prev, NetworkObjectReference curr)
+    private void OnGrabbedObjectChanged(NetworkObjectReference prev, NetworkObjectReference curr)
     {
-        _cachedGrippable = null; // Force re-resolve
+        _cachedGripPoints = null; // Force re-resolve
     }
 
     // ============================================================
-    // SERVER-ONLY API (called by PlayerMotorServer)
+    // SERVER-ONLY API
     // ============================================================
 
-    /// <summary>
-    /// Server: Update held object reference. Call this from pickup/drop systems.
-    /// </summary>
-    public void SetHeldObjectServer(NetworkObject heldObj)
+    /// <summary>Server: Update grabbed object reference</summary>
+    public void SetGrabbedObjectServer(NetworkObject grabbedObj)
     {
         if (!IsServer)
         {
-            Debug.LogWarning("SetHeldObjectServer called on non-server");
+            Debug.LogWarning("SetGrabbedObjectServer called on non-server");
             return;
         }
 
-        HeldObject.Value = heldObj != null
-            ? new NetworkObjectReference(heldObj)
+        GrabbedObject.Value = grabbedObj != null
+            ? new NetworkObjectReference(grabbedObj)
             : default;
     }
 
-    /// <summary>
-    /// Server: Clear held object.
-    /// </summary>
-    public void ClearHeldObjectServer()
+    /// <summary>Server: Clear grabbed object</summary>
+    public void ClearGrabbedObjectServer()
     {
         if (!IsServer)
         {
-            Debug.LogWarning("ClearHeldObjectServer called on non-server");
+            Debug.LogWarning("ClearGrabbedObjectServer called on non-server");
             return;
         }
 
-        HeldObject.Value = default;
+        GrabbedObject.Value = default;
     }
 }

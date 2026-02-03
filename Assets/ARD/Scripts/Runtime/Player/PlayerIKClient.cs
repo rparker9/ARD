@@ -4,7 +4,7 @@ using UnityEngine.Animations.Rigging;
 
 /// <summary>
 /// CLIENT-ONLY (Non-Owner): Drives IK rigs based on PlayerState.
-/// Handles aim IK (spine/head) and hand IK (for held objects).
+/// Handles aim IK (spine/head) and hand IK (for grabbed objects).
 /// Only runs for REMOTE players.
 /// </summary>
 [RequireComponent(typeof(PlayerState))]
@@ -77,8 +77,8 @@ public sealed class PlayerIKClient : NetworkBehaviour
         // Enable IK for remote players
         if (aimRig != null) aimRig.weight = 1f;
 
-        // Subscribe to held object changes
-        _state.HeldObject.OnValueChanged += OnHeldObjectChanged;
+        // Subscribe to grabbed object changes
+        _state.GrabbedObject.OnValueChanged += OnGrabbedObjectChanged;
 
         // Initialize current angles
         _currentPitch = _state.AimPitch.Value;
@@ -89,11 +89,11 @@ public sealed class PlayerIKClient : NetworkBehaviour
     {
         if (!IsOwner)
         {
-            _state.HeldObject.OnValueChanged -= OnHeldObjectChanged;
+            _state.GrabbedObject.OnValueChanged -= OnGrabbedObjectChanged;
         }
     }
 
-    private void OnHeldObjectChanged(NetworkObjectReference prev, NetworkObjectReference curr)
+    private void OnGrabbedObjectChanged(NetworkObjectReference prev, NetworkObjectReference curr)
     {
         // Reset hand velocities when switching objects
         _rightHandVelocity = Vector3.zero;
@@ -157,16 +157,16 @@ public sealed class PlayerIKClient : NetworkBehaviour
 
     private void UpdateHandIK()
     {
-        // Get held object
-        GrippableObject heldObj = _state.HeldGrippable;
-        if (heldObj == null)
+        // Get grabbed object's grip points
+        HandGripPoints gripPoints = _state.GrabbedGripPoints;
+        if (gripPoints == null)
         {
-            // No object held, hands can return to idle pose
+            // No object grabbed, hands return to idle pose
             return;
         }
 
-        // Get grip points
-        var grips = heldObj.GetTwoHandedGrips();
+        // Get both hand grips
+        var grips = gripPoints.GetBothHandGrips();
 
         // Update right hand
         if (useRightHandIK && rightHandTarget != null && grips.right?.transform != null)

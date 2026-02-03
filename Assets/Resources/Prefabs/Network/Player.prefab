@@ -177,7 +177,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: aeda7bfbf984f2a4da5ab4b8967b115d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Animation.Rigging::UnityEngine.Animations.Rigging.TwoBoneIKConstraint
-  m_Weight: 0
+  m_Weight: 1
   m_Data:
     m_Root: {fileID: 5872278627962539530}
     m_Mid: {fileID: 7490733987826246603}
@@ -2179,21 +2179,21 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInteractionController
   ShowTopMostFoldoutHeaderGroup: 1
-  primaryInteract: {fileID: 0}
+  interactAction: {fileID: 0}
   throwAction: {fileID: 0}
-  maxInteractDistance: 3
+  maxReachDistance: 3
   interactMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  carryHoldDistance: 1.8
-  dragHoldDistance: 2.2
+  carryDistance: 1.8
+  dragDistance: 2.2
   dragMassThreshold: 10
-  targetSendInterval: 0.033333335
+  carryUpdateInterval: 0.033333335
   clampToObstacles: 1
   obstaclePadding: 0.15
   throwImpulse: 6.5
   cameraController: {fileID: 8628971278406488148}
-  ignoreHeldCollisionWithPlayer: 1
+  ignoreHeldCollision: 1
 --- !u!1 &5008690420236174958
 GameObject:
   m_ObjectHideFlags: 0
@@ -2667,7 +2667,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: aeda7bfbf984f2a4da5ab4b8967b115d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Animation.Rigging::UnityEngine.Animations.Rigging.TwoBoneIKConstraint
-  m_Weight: 0
+  m_Weight: 1
   m_Data:
     m_Root: {fileID: 5937596413684204087}
     m_Mid: {fileID: 2499621333933385882}

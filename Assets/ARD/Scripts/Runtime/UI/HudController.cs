@@ -2,7 +2,8 @@ using TMPro;
 using UnityEngine;
 
 /// <summary>
-/// 
+/// Displays interaction prompts for the local player.
+/// Reads state directly from PlayerGrabController each frame (no events needed).
 /// </summary>
 public sealed class HUDController : MonoBehaviour
 {
@@ -10,12 +11,7 @@ public sealed class HUDController : MonoBehaviour
     [SerializeField] private GameObject root;
     [SerializeField] private TMP_Text promptText;
 
-    [Header("Behavior")]
-    [Tooltip("How often to refresh (unscaled time). Lower = more responsive, higher = cheaper.")]
-    [SerializeField] private float refreshRate = 0.10f;
-
-    private PlayerInteractionController _pic;
-    private float _nextRefresh;
+    private PlayerGrabController _grabController;
 
     private void Awake()
     {
@@ -23,101 +19,66 @@ public sealed class HUDController : MonoBehaviour
         SetVisible(false);
     }
 
-    private void OnEnable()
-    {
-        TryBindToLocalPlayer();
-        _nextRefresh = 0f;
-    }
-
     private void Update()
     {
-        if (_pic == null)
+        // Find local player if we don't have one
+        if (_grabController == null)
         {
-            TryBindToLocalPlayer();
-            return;
-        }
-
-        if (Time.unscaledTime < _nextRefresh)
-            return;
-
-        _nextRefresh = Time.unscaledTime + refreshRate;
-        Refresh();
-    }
-
-    private void OnDisable()
-    {
-        Unhook();
-    }
-
-    private void TryBindToLocalPlayer()
-    {
-        // Simple binding: find the local owner's PlayerInteractionController.
-        // Replace with your own player registry later if desired.
-        var all = FindObjectsByType<PlayerInteractionController>(FindObjectsSortMode.None);
-        for (int i = 0; i < all.Length; i++)
-        {   
-            var pic = all[i];
-            if (pic != null && pic.IsOwner)
+            _grabController = FindLocalPlayerGrabController();
+            if (_grabController == null)
             {
-                Bind(pic);
+                SetVisible(false);
                 return;
             }
         }
-    }
 
-    private void Bind(PlayerInteractionController pic)
-    {
-        Unhook();
+        // Build prompt text from current state
+        string prompt = BuildPromptText();
 
-        _pic = pic;
-        _pic.OptionsChanged += OnOptionsChanged;
-        _pic.FocusChanged += OnFocusChanged;
-
-        Refresh();
-    }
-
-    private void Unhook()
-    {
-        if (_pic != null)
-        {
-            _pic.OptionsChanged -= OnOptionsChanged;
-            _pic.FocusChanged -= OnFocusChanged;
-            _pic = null;
-        }
-    }
-
-    private void OnOptionsChanged() => Refresh();
-    private void OnFocusChanged() => Refresh();
-
-    private void Refresh()
-    {
-        if (_pic == null || promptText == null)
+        if (string.IsNullOrEmpty(prompt))
         {
             SetVisible(false);
             return;
         }
 
-        var options = _pic.CurrentOptions;
-        if (options == null || options.Count == 0)
-        {
-            SetVisible(false);
-            return;
-        }
-
-        // Convention:
-        // - First option is the primary (E)
-        // - Second option (if present) is Throw (Q) in your current design
-        string line1 = options.Count >= 1 ? $"E: {options[0].Label}" : null;
-        string line2 = options.Count >= 2 ? $"Q: {options[1].Label}" : null;
-
-        if (string.IsNullOrEmpty(line1) && string.IsNullOrEmpty(line2))
-        {
-            SetVisible(false);
-            return;
-        }
-
-        promptText.text = (string.IsNullOrEmpty(line2)) ? line1 : (line1 + "\n" + line2);
+        promptText.text = prompt;
         SetVisible(true);
+    }
+
+    private PlayerGrabController FindLocalPlayerGrabController()
+    {
+        var all = FindObjectsByType<PlayerGrabController>(FindObjectsSortMode.None);
+        foreach (var controller in all)
+        {
+            if (controller != null && controller.IsOwner)
+                return controller;
+        }
+        return null;
+    }
+
+    private string BuildPromptText()
+    {
+        // Primary action (E key)
+        string primary = null;
+        if (!string.IsNullOrEmpty(_grabController.ActionPrompt))
+            primary = $"E: {_grabController.ActionPrompt}";
+
+        // Secondary action (Q key) - only when holding
+        string secondary = null;
+        if (_grabController.CanThrow)
+            secondary = "Q: Throw";
+
+        // Combine prompts
+        if (!string.IsNullOrEmpty(primary) && !string.IsNullOrEmpty(secondary))
+            return $"{primary}\n{secondary}";
+
+        if (!string.IsNullOrEmpty(primary))
+            return primary;
+
+        if (!string.IsNullOrEmpty(secondary))
+            return secondary;
+
+        return null;
     }
 
     private void SetVisible(bool visible)
