@@ -30,7 +30,7 @@
                     "id": "852140f2-7766-474d-8707-702459ba45f3",
                     "expectedControlType": "",
                     "processors": "",
-                    "interactions": "Hold",
+                    "interactions": "",
                     "initialStateCheck": false
                 },
                 {
@@ -70,9 +70,9 @@
                     "initialStateCheck": false
                 },
                 {
-                    "name": "Fire2",
+                    "name": "Throw",
                     "type": "Button",
-                    "id": "351208cf-7447-4880-afa2-bae8e6e5b8b4",
+                    "id": "d7271210-e9e3-4319-86f0-a28482d09012",
                     "expectedControlType": "",
                     "processors": "",
                     "interactions": "",
@@ -203,12 +203,12 @@
                 },
                 {
                     "name": "",
-                    "id": "7247159f-53aa-473d-bc2c-86d090b1c4dd",
-                    "path": "<Mouse>/rightButton",
+                    "id": "541280a2-6b91-4805-87f2-83ee7a5142fc",
+                    "path": "<Keyboard>/q",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "Fire2",
+                    "action": "Throw",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

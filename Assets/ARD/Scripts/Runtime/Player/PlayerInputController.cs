@@ -42,7 +42,7 @@ public struct PlayerInputSnapshot : INetworkSerializable, IEquatable<PlayerInput
 
 /// <summary>
 /// OWNER-ONLY: Collects input, sends to server, feeds to local prediction.
-/// This is the single source of input for both client prediction and server authority.
+/// This is the single source of input for the entire player.
 /// </summary>
 [RequireComponent(typeof(PlayerState))]
 public sealed class PlayerInputController : NetworkBehaviour
@@ -51,10 +51,15 @@ public sealed class PlayerInputController : NetworkBehaviour
     private PlayerMotorServer _serverMotor;
     private PlayerMotorClient _clientMotor;
     private PlayerCameraController _camera;
+    private PlayerGrabController _grabController;
     private PlayerState _state;
 
     private UIRoot _ui;
     private int _tick;
+
+    // Edge detection for event-based inputs
+    private bool _interactWasDown;
+    private bool _throwWasDown;
 
     // ============================================================
     // LIFECYCLE
@@ -73,6 +78,7 @@ public sealed class PlayerInputController : NetworkBehaviour
         _serverMotor = GetComponent<PlayerMotorServer>();
         _clientMotor = GetComponent<PlayerMotorClient>();
         _camera = GetComponent<PlayerCameraController>();
+        _grabController = GetComponent<PlayerGrabController>();
         _state = GetComponent<PlayerState>();
 
         // Get UI
@@ -123,38 +129,39 @@ public sealed class PlayerInputController : NetworkBehaviour
 
     private void Update()
     {
+        // Only run for owner, not when paused, and only when controls exist
         if (!IsOwner) return;
-        if (_controls == null)
-        {
-            return;
-        }
+        if (_controls == null) return;
+        if (_ui != null && _ui.IsPaused) return;
 
-        // Skip input if paused
-        if (_ui != null && _ui.IsPaused)
-            return;
-
-        // Update camera
+        // 1. UPDATE CAMERA FIRST (grab controller needs fresh camera for raycasts)
         if (_camera != null)
         {
             Vector2 look = _controls.Gameplay.Look.ReadValue<Vector2>();
             _camera.ApplyLook(look, Time.deltaTime);
         }
 
-        // Read input
+        // 2. EVENT-BASED INPUTS
+        if (_controls.Gameplay.Interact.triggered && _grabController != null)
+            _grabController.RequestPrimaryAction();
+
+        if (_controls.Gameplay.Throw.triggered && _grabController != null)
+            _grabController.RequestThrow();
+
+        // 3. CONTINUOUS INPUTS (for physics simulation)
         Vector2 move = _controls.Gameplay.Move.ReadValue<Vector2>();
         bool jump = _controls.Gameplay.Jump.IsPressed();
         bool sprint = _controls.Gameplay.Sprint.IsPressed();
         bool fire = _controls.Gameplay.Fire.IsPressed();
         bool crouch = _controls.Gameplay.Crouch.IsPressed();
 
-        // Get aim from camera
+        // Get aim from camera, or fallback to player rotation
         float aimYaw = _camera != null ? _camera.YawDegrees : transform.eulerAngles.y;
         float aimPitch = _camera != null ? _camera.PitchDegrees : 0f;
 
-        // Increment tick
+        // 4. CREATE SNAPSHOT AND SEND TO SERVER
         _tick++;
 
-        // Create snapshot
         var snapshot = new PlayerInputSnapshot
         {
             Tick = _tick,
@@ -182,8 +189,7 @@ public sealed class PlayerInputController : NetworkBehaviour
     {
         if (!IsServer) return;
 
-        // FIX: Get the motor reference if we don't have it yet
-        // This happens on the server's copy of the client's player object
+        // Get the motor reference if we don't have it yet
         if (_serverMotor == null)
             _serverMotor = GetComponent<PlayerMotorServer>();
 
@@ -196,6 +202,18 @@ public sealed class PlayerInputController : NetworkBehaviour
         {
             Debug.LogError("[PlayerInput] ServerMotor component is missing from player prefab!");
         }
+    }
+
+    // ============================================================
+    // INPUT UTILITY
+    // ============================================================
+
+    private bool ReadPressedThisFrame(InputAction action, ref bool wasDown)
+    {
+        bool isDown = action != null && action.ReadValue<float>() > 0.5f;
+        bool pressed = isDown && !wasDown;
+        wasDown = isDown;
+        return pressed;
     }
 
     // ============================================================

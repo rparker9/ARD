@@ -290,4 +290,4 @@ public sealed class PlayerIKClient : NetworkBehaviour
             Gizmos.DrawWireSphere(leftHandTarget.position, 0.08f);
         }
     }
-}
+} 

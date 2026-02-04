@@ -1,20 +1,16 @@
 using System;
 using Unity.Netcode;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 /// <summary>
 /// Handles player grabbing, carrying, dropping, and throwing physics objects.
 /// Also supports optional "use" interactions via Interactable components.
+/// Input is handled by PlayerInputController.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(PlayerState))]
 public sealed class PlayerGrabController : NetworkBehaviour
 {
-    [Header("Input")]
-    [SerializeField] private InputActionReference interactAction; // E key fallback
-    [SerializeField] private InputActionReference throwAction; // Q key fallback
-
     [Header("Raycast")]
     [SerializeField] private float maxReachDistance = 3.0f;
     [SerializeField] private LayerMask interactMask = ~0;
@@ -44,12 +40,9 @@ public sealed class PlayerGrabController : NetworkBehaviour
 
     // Internal state
     private PlayerState _state;
-    private UIRoot _ui;
     private NetworkObject _localHeldObject;
     private NetworkObject _heldObjectIgnoringCollision;
     private float _nextCarryUpdateTime;
-    private bool _interactWasDown;
-    private bool _throwWasDown;
 
     // ============================================================
     // LIFECYCLE
@@ -64,13 +57,6 @@ public sealed class PlayerGrabController : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        if (IsOwner)
-        {
-            interactAction?.action?.Enable();
-            throwAction?.action?.Enable();
-            _ui = AppRoot.Instance?.GetComponent<UIRoot>();
-        }
-
         if (_state != null)
             _state.GrabbedObject.OnValueChanged += OnGrabbedObjectChanged;
 
@@ -81,12 +67,6 @@ public sealed class PlayerGrabController : NetworkBehaviour
     {
         if (_state != null)
             _state.GrabbedObject.OnValueChanged -= OnGrabbedObjectChanged;
-
-        if (IsOwner)
-        {
-            interactAction?.action?.Disable();
-            throwAction?.action?.Disable();
-        }
 
         if (IsServer)
             ServerDrop();
@@ -100,23 +80,40 @@ public sealed class PlayerGrabController : NetworkBehaviour
     {
         if (!IsOwner) return;
         if (cameraController?.Camera == null) return;
-        if (_ui?.IsPaused ?? false) return;
 
         UpdateLookTarget();
-
-        // Input handling
-        bool interactPressed = ReadPressedThisFrame(interactAction, Key.E, ref _interactWasDown);
-        bool throwPressed = ReadPressedThisFrame(throwAction, Key.Q, ref _throwWasDown);
-
-        if (interactPressed)
-            RequestPrimaryAction();
-
-        if (throwPressed && _localHeldObject != null)
-            RequestThrowAction();
 
         // Send carry target updates
         if (_localHeldObject != null)
             UpdateCarryTargetPositionIfDue();
+    }
+
+    // ============================================================
+    // PUBLIC INPUT API (called by PlayerInputController)
+    // ============================================================
+
+    /// <summary>
+    /// Called by PlayerInputController when interact key is pressed.
+    /// Handles Interact → Drop → Grab priority.
+    /// </summary>
+    public void RequestPrimaryAction()
+    {
+        if (!IsOwner) return;
+
+        Debug.Log("RequestPrimaryAction called");
+        var target = LookedAtObject != null ? new NetworkObjectReference(LookedAtObject) : default;
+        RequestPrimaryActionServerRpc(target);
+    }
+
+    /// <summary>
+    /// Called by PlayerInputController when throw key is pressed.
+    /// </summary>
+    public void RequestThrow()
+    {
+        if (!IsOwner) return;
+        if (_localHeldObject == null) return;
+
+        RequestThrowServerRpc();
     }
 
     // ============================================================
@@ -268,6 +265,15 @@ public sealed class PlayerGrabController : NetworkBehaviour
     // GRABBED OBJECT COLLISION MANAGEMENT
     // ============================================================
 
+    /// <summary>
+    /// Handles updates to the currently grabbed object, managing collision states and updating related prompts as
+    /// necessary.
+    /// </summary>
+    /// <remarks>This method ensures that collision settings between the player and grabbed objects are
+    /// correctly managed when the grabbed object changes. It also updates the action prompt to reflect the current
+    /// interaction state.</remarks>
+    /// <param name="prev">A reference to the previously grabbed network object. Used to restore collision settings if applicable.</param>
+    /// <param name="curr">A reference to the newly grabbed network object. Used to update collision management and action prompts.</param>
     private void OnGrabbedObjectChanged(NetworkObjectReference prev, NetworkObjectReference curr)
     {
         // Restore collision with previous object
@@ -312,19 +318,8 @@ public sealed class PlayerGrabController : NetworkBehaviour
     }
 
     // ============================================================
-    // INPUT REQUESTS (CLIENT → SERVER)
+    // RPC METHODS (SERVER)
     // ============================================================
-
-    private void RequestPrimaryAction()
-    {
-        var target = LookedAtObject != null ? new NetworkObjectReference(LookedAtObject) : default;
-        RequestPrimaryActionServerRpc(target);
-    }
-
-    private void RequestThrowAction()
-    {
-        RequestThrowServerRpc();
-    }
 
     [Rpc(SendTo.Server)]
     private void RequestPrimaryActionServerRpc(NetworkObjectReference targetObj)
@@ -473,20 +468,5 @@ public sealed class PlayerGrabController : NetworkBehaviour
     private Vector3 ServerEyePosition()
     {
         return transform.position + Vector3.up * 1.6f;
-    }
-
-    // ============================================================
-    // UTILITY
-    // ============================================================
-
-    private static bool ReadPressedThisFrame(InputActionReference actionRef, Key fallbackKey, ref bool wasDown)
-    {
-        bool isDown = actionRef?.action != null
-            ? actionRef.action.ReadValue<float>() > 0.5f
-            : Keyboard.current != null && Keyboard.current[fallbackKey].isPressed;
-
-        bool pressed = isDown && !wasDown;
-        wasDown = isDown;
-        return pressed;
     }
 }
